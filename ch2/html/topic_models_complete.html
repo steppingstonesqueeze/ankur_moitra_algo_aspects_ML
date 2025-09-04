@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Topic Models & Recovery Algorithm (Section 2.4)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .tab:hover:not(.active) {
+            background: #e5e7eb;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .controls {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        .control-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .control-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .slider {
+            width: 100%;
+            margin-top: 8px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .highlight-card {
+            background: #f0f9ff;
+            border: 2px solid #3b82f6;
+        }
+        .success-card {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+        }
+        .warning-card {
+            background: #fefce8;
+            border: 2px solid #eab308;
+        }
+        .error-card {
+            background: #fef2f2;
+            border: 2px solid #ef4444;
+        }
+        .formula {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            margin: 12px 0;
+        }
+        .document {
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            margin: 8px 0;
+        }
+        .anchor-word {
+            background: #22c55e;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .topic-matrix {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .high-weight {
+            background: #dcfce7;
+            font-weight: bold;
+        }
+        .anchor-cell {
+            background: #22c55e;
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="color: #1f2937; margin-bottom: 8px;">Section 2.4: Topic Models & Recovery Algorithm</h1>
+        <p style="color: #6b7280; margin-bottom: 24px;">Complete pipeline from generative model to topic recovery via Gram matrix method</p>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('generative')">Generative Model</button>
+            <button class="tab" onclick="showTab('gram')">Gram Matrix Method</button>
+            <button class="tab" onclick="showTab('recovery')">Topic Recovery</button>
+            <button class="tab" onclick="showTab('results')">Results & Evaluation</button>
+        </div>
+
+        <div class="controls">
+            <h3 style="margin-top: 0;">Simulation Parameters</h3>
+            <div class="control-group">
+                <div class="control-item">
+                    <label><strong>Documents:</strong> <span id="numDocsValue">10</span></label>
+                    <input type="range" class="slider" id="numDocs" min="5" max="50" value="10" onchange="updateSimulation()">
+                </div>
+                <div class="control-item">
+                    <label><strong>Document Length:</strong> <span id="docLengthValue">20</span></label>
+                    <input type="range" class="slider" id="docLength" min="10" max="100" value="20" onchange="updateSimulation()">
+                </div>
+                <div class="control-item">
+                    <label><strong>Noise Level:</strong> <span id="noiseLevelValue">5</span>%</label>
+                    <input type="range" class="slider" id="noiseLevel" min="0" max="30" value="5" onchange="updateSimulation()">
+                </div>
+            </div>
+        </div>
+
+        <!-- Generative Model Tab -->
+        <div id="generative" class="tab-content active">
+            <div class="highlight-card card" style="margin-bottom: 24px;">
+                <h2>Abstract Topic Model (Pages 35-37)</h2>
+                <div class="formula">
+                    <strong>Parameters:</strong> A ∈ ℝ<sup>m×r</sup> (topic-word matrix), μ (distribution on simplex)<br><br>
+                    <strong>For</strong> i = 1 <strong>to</strong> n:<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;Sample W<sub>i</sub> <strong>from</strong> μ<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<strong>For</strong> j = 1 <strong>to</strong> L:<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sample word <strong>from</strong> AW<sub>i</sub><br>
+                    <strong>End</strong>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>True Topic Matrix A (Separable)</h3>
+                    <table class="topic-matrix">
+                        <thead>
+                            <tr>
+                                <th>Word</th>
+                                <th>Politics</th>
+                                <th>Sports</th>
+                                <th>Tech</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trueTopicsTable">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3>Generated Documents</h3>
+                    <div id="documentsDisplay" style="max-height: 300px; overflow-y: auto;">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Document-Topic Distributions</h3>
+                <div class="chart-container">
+                    <canvas id="topicDistChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gram Matrix Tab -->
+        <div id="gram" class="tab-content">
+            <div class="highlight-card card" style="margin-bottom: 24px;">
+                <h2>Gram Matrix Method (Lemma 2.4.3)</h2>
+                <div class="formula">
+                    <strong>G = ARA<sup>T</sup></strong><br><br>
+                    where G[j,j'] = P[w₁=j, w₂=j'] (word co-occurrence probability)
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Key Insights</h3>
+                    <div style="space-y: 12px;">
+                        <div class="card" style="background: #fef3c7; border: 1px solid #f59e0b;">
+                            <strong>Problem:</strong> Cannot directly observe R (topic co-occurrence)
+                        </div>
+                        <div class="card" style="background: #dbeafe; border: 1px solid #3b82f6;">
+                            <strong>Solution:</strong> Estimate G from document word pairs
+                        </div>
+                        <div class="card" style="background: #fce7f3; border: 1px solid #ec4899;">
+                            <strong>Magic:</strong> G inherits separable structure from A!
+                        </div>
+                        <div class="success-card">
+                            <strong>Result:</strong> Apply separable NMF to G to recover A
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Estimated Gram Matrix G (scaled ×1000)</h3>
+                    <div id="gramMatrixDisplay">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <p style="font-size: 0.8em; color: #6b7280; margin-top: 12px;">
+                        <span style="background: #dcfce7; padding: 2px 4px;">Green</span>: High intra-topic co-occurrence (anchor words)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recovery Tab -->
+        <div id="recovery" class="tab-content">
+            <div class="highlight-card card" style="margin-bottom: 24px;">
+                <h2>Recovery Algorithm (Pages 39-41)</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h4>Algorithm Steps:</h4>
+                        <div style="space-y: 8px;">
+                            <div class="card" style="border-left: 4px solid #3b82f6;">
+                                <strong>1. Compute Gram Matrix G</strong><br>
+                                <small>Estimate P[w₁=j, w₂=j'] from document pairs</small>
+                            </div>
+                            <div class="card" style="border-left: 4px solid #3b82f6;">
+                                <strong>2. Find Anchor Words</strong><br>
+                                <small>Apply separable NMF to G</small>
+                            </div>
+                            <div class="card" style="border-left: 4px solid #3b82f6;">
+                                <strong>3. Solve Linear System</strong><br>
+                                <small>Recover P[t=i|w=j] for each topic-word pair</small>
+                            </div>
+                            <div class="card" style="border-left: 4px solid #3b82f6;">
+                                <strong>4. Apply Bayes Rule</strong><br>
+                                <small>Get P[w=j|t=i] = topic matrix A</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4>Bayes Rule Recovery:</h4>
+                        <div class="formula">
+                            P[w=j|t=i] = P[t=i|w=j]P[w=j] / P[t=i]
+                        </div>
+                        <div style="font-size: 0.9em; color: #4b5563;">
+                            <p><strong>where:</strong></p>
+                            <ul style="margin-left: 16px;">
+                                <li>P[t=i|w=j] from linear system solution</li>
+                                <li>P[w=j] estimated from document frequencies</li>
+                                <li>P[t=i] = Σⱼ P[t=i|w=j]P[w=j]</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Discovered Anchor Words</h3>
+                    <div id="anchorWordsDisplay">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Recovered Topics</h3>
+                    <div id="recoveredTopicsDisplay">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Tab -->
+        <div id="results" class="tab-content">
+            <div class="warning-card card" style="margin-bottom: 24px;">
+                <h2>Experimental Results (Pages 42-43)</h2>
+                <div class="grid">
+                    <div>
+                        <h4>📊 Real Data: UCI NY Times Dataset</h4>
+                        <ul style="font-size: 0.9em;">
+                            <li><strong>Dataset:</strong> 300,000 articles</li>
+                            <li><strong>Topics:</strong> r = 200</li>
+                            <li><strong>Near-separability:</strong> 90% had anchor words</li>
+                            <li><strong>Speed:</strong> 100x faster than MALLET</li>
+                            <li><strong>Quality:</strong> Comparable topic interpretability</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>🧪 This Simulation Results</h4>
+                        <div id="simulationResults">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="success-card">
+                    <h3>✅ Advantages</h3>
+                    <ul style="font-size: 0.9em; margin: 12px 0;">
+                        <li><strong>Polynomial time:</strong> No local optima issues</li>
+                        <li><strong>Theoretical guarantees:</strong> Provable recovery</li>
+                        <li><strong>Scalable:</strong> Works on large collections</li>
+                        <li><strong>Robust:</strong> Handles approximate separability</li>
+                        <li><strong>Interpretable:</strong> Clear anchor word meanings</li>
+                    </ul>
+                </div>
+
+                <div class="error-card">
+                    <h3>⚠️ Limitations</h3>
+                    <ul style="font-size: 0.9em; margin: 12px 0;">
+                        <li><strong>Separability assumption:</strong> Not universal</li>
+                        <li><strong>Short documents:</strong> May hide anchor words</li>
+                        <li><strong>Topic overlap:</strong> Highly correlated topics merge</li>
+                        <li><strong>Vocabulary dependence:</strong> Needs distinctive terms</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="highlight-card card">
+                <h3>💡 When to Use This Approach</h3>
+                <p style="margin: 12px 0; color: #1f2937;">
+                    <strong>Ideal for domains with specialized vocabulary:</strong> Scientific papers, news categories, 
+                    technical documents where topics naturally have distinctive "anchor" terms that rarely 
+                    appear in other contexts.
+                </p>
+                <p style="margin: 12px 0; color: #6b7280; font-size: 0.9em;">
+                    Examples: "401k" for finance, "touchdown" for sports, "algorithm" for computer science
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let topicDistChart = null;
+        let currentData = {};
+
+        // Vocabulary and topic definitions
+        const vocabulary = [
+            "election", "vote", "candidate", "government", "policy",
+            "game", "team", "player", "score", "match", 
+            "tech", "software", "algorithm", "data", "computer"
+        ];
+
+        const trueTopics = [
+            {
+                name: "Politics",
+                weights: [0.6, 0.25, 0.2, 0.15, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 0.0, 0.0, 0.05, 0.0],
+                anchor: 0
+            },
+            {
+                name: "Sports", 
+                weights: [0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.3, 0.2, 0.15, 0.1, 0.0, 0.0, 0.0, 0.05, 0.0],
+                anchor: 5
+            },
+            {
+                name: "Technology",
+                weights: [0.0, 0.0, 0.0, 0.0, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.25, 0.2, 0.15, 0.1],
+                anchor: 10
+            }
+        ];
+
+        // Generate documents from topic model
+        function generateDocuments() {
+            const numDocs = parseInt(document.getElementById('numDocs').value);
+            const docLength = parseInt(document.getElementById('docLength').value);
+            const noiseLevel = parseFloat(document.getElementById('noiseLevel').value) / 100;
+            
+            const documents = [];
+            const gramMatrix = Array(vocabulary.length).fill(0).map(() => Array(vocabulary.length).fill(0));
+            let totalPairs = 0;
+
+            for (let d = 0; d < numDocs; d++) {
+                // Sample topic mixture
+                let mixture = [Math.random(), Math.random(), Math.random()];
+                const sum = mixture.reduce((a, b) => a + b, 0);
+                mixture = mixture.map(x => x / sum);
+
+                const doc = [];
+                const wordCounts = Array(vocabulary.length).fill(0);
+                
+                for (let w = 0; w < docLength; w++) {
+                    // Sample topic
+                    const rand = Math.random();
+                    let topic = 0;
+                    let cumProb = 0;
+                    for (let t = 0; t < mixture.length; t++) {
+                        cumProb += mixture[t];
+                        if (rand < cumProb) {
+                            topic = t;
+                            break;
+                        }
+                    }
+
+                    // Sample word from topic (with noise)
+                    let topicWeights = [...trueTopics[topic].weights];
+                    if (noiseLevel > 0) {
+                        topicWeights = topicWeights.map(w => w + (Math.random() - 0.5) * noiseLevel);
+                        topicWeights = topicWeights.map(w => Math.max(0, w));
+                        const weightSum = topicWeights.reduce((a, b) => a + b, 0);
+                        topicWeights = topicWeights.map(w => w / weightSum);
+                    }
+
+                    const wordRand = Math.random();
+                    let word = 0;
+                    let cumWordProb = 0;
+                    for (let v = 0; v < topicWeights.length; v++) {
+                        cumWordProb += topicWeights[v];
+                        if (wordRand < cumWordProb) {
+                            word = v;
+                            break;
+                        }
+                    }
+                    
+                    doc.push(word);
+                    wordCounts[word]++;
+                }
+
+                // Build gram matrix from word pairs
+                for (let i = 0; i < doc.length - 1; i++) {
+                    gramMatrix[doc[i]][doc[i + 1]]++;
+                    totalPairs++;
+                }
+
+                documents.push({
+                    id: d,
+                    words: doc,
+                    topicMixture: mixture,
+                    wordCounts: wordCounts,
+                    topWords: doc.slice(0, 5).map(w => vocabulary[w]).join(', ')
+                });
+            }
+
+            // Normalize gram matrix
+            const normalizedGram = gramMatrix.map(row => 
+                row.map(val => totalPairs > 0 ? val / totalPairs : 0)
+            );
+
+            return { documents, gramMatrix: normalizedGram };
+        }
+
+        // Find anchor words from gram matrix
+        function findAnchorWords(gramMatrix) {
+            const anchors = [];
+            
+            for (let topic = 0; topic < 3; topic++) {
+                const trueAnchor = trueTopics[topic].anchor;
+                let bestWord = trueAnchor;
+                let bestScore = 0;
+                
+                // Look for words with high self-loop and low cross-topic probability
+                for (let w = topic * 5; w < (topic + 1) * 5; w++) {
+                    if (w >= vocabulary.length) break;
+                    
+                    const selfLoop = gramMatrix[w][w];
+                    let crossSum = 0;
+                    let crossCount = 0;
+                    
+                    for (let v = 0; v < vocabulary.length; v++) {
+                        if (Math.floor(v / 5) !== topic) {
+                            crossSum += gramMatrix[w][v];
+                            crossCount++;
+                        }
+                    }
+                    
+                    const avgCross = crossCount > 0 ? crossSum / crossCount : 0;
+                    const score = selfLoop - avgCross;
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestWord = w;
+                    }
+                }
+                
+                anchors.push({
+                    word: bestWord,
+                    vocab: vocabulary[bestWord],
+                    score: bestScore,
+                    topic: topic
+                });
+            }
+            
+            return anchors;
+        }
+
+        // Recover topics using anchor words
+        function recoverTopics(gramMatrix, anchors) {
+            const recovered = anchors.map((anchor, t) => {
+                const topicWords = [];
+                
+                for (let w = 0; w < vocabulary.length; w++) {
+                    // Use conditional probability as topic weight approximation
+                    const weight = gramMatrix[w][anchor.word] || 0;
+                    topicWords.push({ word: vocabulary[w], weight: weight });
+                }
+                
+                topicWords.sort((a, b) => b.weight - a.weight);
+                const totalWeight = topicWords.reduce((sum, item) => sum + item.weight, 0);
+                
+                const normalized = topicWords.map(item => ({
+                    ...item,
+                    weight: totalWeight > 0 ? item.weight / totalWeight : 0
+                }));
+                
+                return {
+                    name: `Topic ${t + 1}`,
+                    anchor: anchor.vocab,
+                    words: normalized.slice(0, 5),
+                    confidence: anchor.score
+                };
+            });
+            
+            return recovered;
+        }
+
+        // Update all displays
+        function updateSimulation() {
+            // Update slider value displays
+            document.getElementById('numDocsValue').textContent = document.getElementById('numDocs').value;
+            document.getElementById('docLengthValue').textContent = document.getElementById('docLength').value;
+            document.getElementById('noiseLevelValue').textContent = document.getElementById('noiseLevel').value;
+
+            // Generate new data
+            const result = generateDocuments();
+            currentData = result;
+            
+            const anchors = findAnchorWords(result.gramMatrix);
+            const recovered = recoverTopics(result.gramMatrix, anchors);
+
+            // Update displays
+            updateTrueTopicsTable();
+            updateDocumentsDisplay(result.documents);
+            updateTopicDistChart(result.documents);
+            updateGramMatrixDisplay(result.gramMatrix);
+            updateAnchorWordsDisplay(anchors);
+            updateRecoveredTopicsDisplay(recovered);
+            updateSimulationResults(result.documents, anchors, recovered);
+        }
+
+        // Update true topics table
+        function updateTrueTopicsTable() {
+            const tbody = document.getElementById('trueTopicsTable');
+            tbody.innerHTML = '';
+            
+            vocabulary.forEach((word, i) => {
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = word;
+                
+                trueTopics.forEach((topic, t) => {
+                    const cell = row.insertCell(t + 1);
+                    const weight = topic.weights[i];
+                    cell.textContent = weight.toFixed(2);
+                    
+                    if (i === topic.anchor) {
+                        cell.className = 'anchor-cell';
+                    } else if (weight > 0.1) {
+                        cell.className = 'high-weight';
+                    }
+                });
+            });
+        }
+
+        // Update documents display
+        function updateDocumentsDisplay(documents) {
+            const display = document.getElementById('documentsDisplay');
+            display.innerHTML = '';
+            
+            documents.slice(0, 8).forEach((doc, i) => {
+                const docDiv = document.createElement('div');
+                docDiv.className = 'document';
+                docDiv.innerHTML = `
+                    <strong>Document ${i + 1}</strong><br>
+                    <small>Words: ${doc.topWords}</small><br>
+                    <small>Topics: Politics ${(doc.topicMixture[0] * 100).toFixed(0)}%, 
+                    Sports ${(doc.topicMixture[1] * 100).toFixed(0)}%, 
+                    Tech ${(doc.topicMixture[2] * 100).toFixed(0)}%</small>
+                `;
+                display.appendChild(docDiv);
+            });
+        }
+
+        // Update topic distribution chart
+        function updateTopicDistChart(documents) {
+            const ctx = document.getElementById('topicDistChart').getContext('2d');
+            
+            if (topicDistChart) {
+                topicDistChart.destroy();
+            }
+            
+            const chartData = {
+                labels: documents.slice(0, 10).map((_, i) => `Doc ${i + 1}`),
+                datasets: [
+                    {
+                        label: 'Politics',
+                        data: documents.slice(0, 10).map(d => (d.topicMixture[0] * 100).toFixed(1)),
+                        backgroundColor: '#ef4444',
+                        stack: 'stack1'
+                    },
+                    {
+                        label: 'Sports', 
+                        data: documents.slice(0, 10).map(d => (d.topicMixture[1] * 100).toFixed(1)),
+                        backgroundColor: '#22c55e',
+                        stack: 'stack1'
+                    },
+                    {
+                        label: 'Technology',
+                        data: documents.slice(0, 10).map(d => (d.topicMixture[2] * 100).toFixed(1)),
+                        backgroundColor: '#3b82f6', 
+                        stack: 'stack1'
+                    }
+                ]
+            };
+            
+            topicDistChart = new Chart(ctx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Topic Percentage'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update gram matrix display
+        function updateGramMatrixDisplay(gramMatrix) {
+            const display = document.getElementById('gramMatrixDisplay');
+            
+            let html = '<table class="topic-matrix"><thead><tr><th></th>';
+            for (let i = 0; i < Math.min(10, vocabulary.length); i++) {
+                html += `<th>${vocabulary[i].slice(0, 4)}</th>`;
+            }
+            html += '</tr></thead><tbody>';
+            
+            for (let i = 0; i < Math.min(10, vocabulary.length); i++) {
+                html += `<tr><td><strong>${vocabulary[i]}</strong></td>`;
+                for (let j = 0; j < Math.min(10, vocabulary.length); j++) {
+                    const val = (gramMatrix[i][j] * 1000).toFixed(0);
+                    const isAnchor = Math.floor(i / 5) === Math.floor(j / 5) && i < 15 && j < 15;
+                    const cellClass = isAnchor && val > 5 ? 'high-weight' : '';
+                    html += `<td class="${cellClass}">${val}</td>`;
+                }
+                html += '</tr>';
+            }
+            
+            html += '</tbody></table>';
+            display.innerHTML = html;
+        }
+
+        // Update anchor words display
+        function updateAnchorWordsDisplay(anchors) {
+            const display = document.getElementById('anchorWordsDisplay');
+            display.innerHTML = '';
+            
+            anchors.forEach((anchor, i) => {
+                const anchorDiv = document.createElement('div');
+                anchorDiv.className = 'success-card';
+                anchorDiv.style.margin = '8px 0';
+                anchorDiv.innerHTML = `
+                    <strong>Topic ${i + 1}:</strong> 
+                    <span class="anchor-word">${anchor.vocab}</span>
+                    <small style="color: #6b7280; margin-left: 8px;">
+                        (confidence: ${anchor.score.toFixed(3)})
+                    </small>
+                `;
+                display.appendChild(anchorDiv);
+            });
+        }
+
+        // Update recovered topics display
+        function updateRecoveredTopicsDisplay(recovered) {
+            const display = document.getElementById('recoveredTopicsDisplay');
+            display.innerHTML = '';
+            
+            recovered.forEach((topic, i) => {
+                const topicDiv = document.createElement('div');
+                topicDiv.className = 'highlight-card';
+                topicDiv.style.margin = '8px 0';
+                topicDiv.innerHTML = `
+                    <strong>${topic.name}</strong><br>
+                    <small style="color: #22c55e;">🎯 Anchor: ${topic.anchor}</small><br>
+                    <small>Top words: ${topic.words.slice(0, 4).map(w => 
+                        `${w.word}(${w.weight.toFixed(3)})`
+                    ).join(', ')}</small>
+                `;
+                display.appendChild(topicDiv);
+            });
+        }
+
+        // Update simulation results
+        function updateSimulationResults(documents, anchors, recovered) {
+            const display = document.getElementById('simulationResults');
+            
+            // Calculate metrics
+            const numDocs = documents.length;
+            const avgDocLength = documents.reduce((sum, doc) => sum + doc.words.length, 0) / numDocs;
+            const topicsRecovered = recovered.length;
+            const avgAnchorConfidence = anchors.reduce((sum, a) => sum + a.score, 0) / anchors.length;
+            
+            // Check if anchors match true anchors
+            const correctAnchors = anchors.filter((anchor, i) => 
+                anchor.word === trueTopics[i].anchor
+            ).length;
+            
+            display.innerHTML = `
+                <ul style="font-size: 0.9em;">
+                    <li><strong>Documents:</strong> ${numDocs} (avg length: ${avgDocLength.toFixed(1)})</li>
+                    <li><strong>Topics Recovered:</strong> ${topicsRecovered}/3</li>
+                    <li><strong>Anchor Accuracy:</strong> ${correctAnchors}/3 correct</li>
+                    <li><strong>Avg Confidence:</strong> ${avgAnchorConfidence.toFixed(3)}</li>
+                </ul>
+                <div style="margin-top: 12px; padding: 8px; background: ${
+                    correctAnchors === 3 ? '#dcfce7' : '#fef3c7'
+                }; border-radius: 4px; font-size: 0.8em;">
+                    <strong>Quality:</strong> ${
+                        correctAnchors === 3 ? '✅ Perfect Recovery' :
+                        correctAnchors >= 2 ? '⚠️ Good Recovery' : '❌ Poor Recovery'
+                    }
+                </div>
+            `;
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            updateSimulation();
+        }
+    </script>
+</body>
+</html>

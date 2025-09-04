@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Separable NMF & Anchor Words Algorithm (Section 2.3)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .tab:hover:not(.active) {
+            background: #e5e7eb;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .highlight-card {
+            background: #f0f9ff;
+            border: 2px solid #3b82f6;
+        }
+        .success-card {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+        }
+        .warning-card {
+            background: #fefce8;
+            border: 2px solid #eab308;
+        }
+        .error-card {
+            background: #fef2f2;
+            border: 2px solid #ef4444;
+        }
+        .formula {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            margin: 12px 0;
+            font-size: 1.1em;
+        }
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: center;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .anchor-cell {
+            background: #22c55e;
+            color: white;
+            font-weight: bold;
+        }
+        .high-weight {
+            background: #dcfce7;
+            font-weight: bold;
+        }
+        .low-weight {
+            color: #9ca3af;
+        }
+        .example-button {
+            padding: 12px 16px;
+            margin: 8px;
+            border: 2px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .example-button.active {
+            border-color: #3b82f6;
+            background: #f0f9ff;
+        }
+        .example-button:hover {
+            border-color: #6b7280;
+        }
+        .algorithm-step {
+            padding: 12px;
+            margin: 8px 0;
+            border-left: 4px solid #d1d5db;
+            border-radius: 4px;
+            background: #f9fafb;
+        }
+        .algorithm-step.active {
+            border-color: #22c55e;
+            background: #f0fdf4;
+            color: #166534;
+        }
+        .anchor-word {
+            display: inline-block;
+            background: #22c55e;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="color: #1f2937; margin-bottom: 8px;">Section 2.3: Separability & Anchor Words Algorithm</h1>
+        <p style="color: #6b7280; margin-bottom: 24px;">Geometric interpretation of NMF and the polynomial-time separable case</p>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('geometric')">Geometric View</button>
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('geometric')">Geometric View</button>
+            <button class="tab" onclick="showTab('separability')">Separability Condition</button>
+            <button class="tab" onclick="showTab('algorithm')">Anchor Words Algorithm</button>
+            <button class="tab" onclick="showTab('comparison')">Separable vs Non-Separable</button>
+        </div>
+
+        <!-- Geometric View Tab -->
+        <div id="geometric" class="tab-content active">
+            <div class="highlight-card card" style="margin-bottom: 24px;">
+                <h2>Geometric Interpretation (Claim 2.3.2)</h2>
+                <div class="formula">
+                    M = AW ⟺ C<sub>M</sub> ⊆ C<sub>A</sub>
+                </div>
+                <p style="text-align: center; color: #6b7280; margin-top: 8px;">
+                    Cone generated by columns of M is contained in cone generated by columns of A
+                </p>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>Definition: Cone</h3>
+                    <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+                        <div class="formula">C<sub>A</sub> = {Ax | x ≥ 0}</div>
+                        <p style="margin: 8px 0; font-size: 0.9em;">All non-negative linear combinations of columns of A</p>
+                    </div>
+                    
+                    <div style="font-size: 0.9em;">
+                        <div style="margin: 8px 0;"><strong>Key Insight:</strong> If we know A, finding W is easy (linear programming)</div>
+                        <div style="margin: 8px 0;"><strong>Hard Part:</strong> Both A and W are unknown</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Word Vectors in Topic Space</h3>
+                    <div class="chart-container">
+                        <canvas id="geometricChart"></canvas>
+                    </div>
+                    <p style="font-size: 0.8em; color: #6b7280; margin-top: 8px;">
+                        🔴 Red points: Anchor words (extreme points of convex hull)<br>
+                        🔵 Blue points: Regular words (interior points)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Separability Tab -->
+        <div id="separability" class="tab-content">
+            <div class="grid" style="margin-bottom: 24px;">
+                <div class="card">
+                    <h3>Choose Example:</h3>
+                    <div>
+                        <button class="example-button active" onclick="selectExample('separable')" id="separableBtn">
+                            <div style="font-weight: 600; color: #16a34a;">✅ Separable Matrix</div>
+                            <div style="font-size: 0.8em; color: #6b7280;">Each topic has an anchor word</div>
+                        </button>
+                        <button class="example-button" onclick="selectExample('nonseparable')" id="nonseparableBtn">
+                            <div style="font-weight: 600; color: #dc2626;">❌ Non-Separable Matrix</div>
+                            <div style="font-size: 0.8em; color: #6b7280;">No clear anchor words</div>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Separability Definition (2.3.11)</h3>
+                    <div style="font-size: 0.9em;">
+                        <p><strong>A is separable if:</strong></p>
+                        <p style="margin: 8px 0;">For every topic i, there exists a word j where:</p>
+                        <div class="formula">
+                            A[j, i] > 0 and A[j, k] = 0 for all k ≠ i
+                        </div>
+                        <p style="color: #6b7280; font-size: 0.8em;">Word j is called an "anchor word" for topic i</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Topic Matrix A Analysis</h3>
+                
+                <div class="grid">
+                    <div>
+                        <h4 style="margin-bottom: 12px;">Topic Matrix A (<span id="matrixTypeName">Separable Matrix</span>)</h4>
+                        <table id="topicMatrixTable">
+                            <!-- Populated by JavaScript -->
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h4 style="margin-bottom: 12px;">Separability Check</h4>
+                        <div id="separabilityCheck">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Algorithm Tab -->
+        <div id="algorithm" class="tab-content">
+            <div class="success-card card" style="margin-bottom: 24px;">
+                <h2>Anchor Words Algorithm (Theorem 2.3.12)</h2>
+                <div style="text-align: center; padding: 12px; background: white; border-radius: 6px; margin: 12px 0;">
+                    <p style="font-weight: 600;">
+                        If M = AW where A is separable and W has full row rank, then we can recover A and W in polynomial time!
+                    </p>
+                </div>
+            </div>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>Algorithm Steps</h3>
+                    <div id="algorithmSteps">
+                        <div class="algorithm-step active">
+                            <div style="font-weight: 600;">Step 1</div>
+                            <div style="font-size: 0.9em;">Start with all word vectors (rows of M)</div>
+                        </div>
+                        <div class="algorithm-step">
+                            <div style="font-weight: 600;">Step 2</div>
+                            <div style="font-size: 0.9em;">Check if each word is in convex hull of others</div>
+                        </div>
+                        <div class="algorithm-step">
+                            <div style="font-weight: 600;">Step 3</div>
+                            <div style="font-size: 0.9em;">Remove words that are in convex hull</div>
+                        </div>
+                        <div class="algorithm-step">
+                            <div style="font-weight: 600;">Step 4</div>
+                            <div style="font-size: 0.9em;">Remaining words are anchor words</div>
+                        </div>
+                        <div class="algorithm-step">
+                            <div style="font-weight: 600;">Step 5</div>
+                            <div style="font-size: 0.9em;">Solve for A using anchor words</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <button onclick="nextAlgorithmStep()" id="nextStepBtn" 
+                                style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">
+                            Next Step
+                        </button>
+                        <button onclick="resetAlgorithm()" 
+                                style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Key Insight: Convex Hull</h3>
+                    <div style="background: white; padding: 16px; border: 1px solid #e5e7eb; border-radius: 6px;">
+                        <div style="margin-bottom: 12px; font-size: 0.9em;">
+                            <p style="margin-bottom: 8px;"><strong>Why it works:</strong></p>
+                            <ul style="margin-left: 16px; font-size: 0.85em;">
+                                <li>Anchor words are extreme points of convex hull</li>
+                                <li>Non-anchor words are inside the hull</li>
+                                <li>Iteratively remove interior points</li>
+                                <li>Remaining points are anchors</li>
+                            </ul>
+                        </div>
+                        
+                        <div style="padding: 12px; background: #f0f9ff; border-radius: 4px; font-size: 0.8em;">
+                            <strong>Complexity:</strong> O(m³n) where m = words, n = documents<br>
+                            <strong>Improvement:</strong> Greedy version using furthest-point heuristic
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="warning-card card">
+                <h3 style="color: #92400e;">Practical Implementation Notes</h3>
+                <ul style="font-size: 0.9em; color: #92400e;">
+                    <li>Real matrices are rarely exactly separable</li>
+                    <li>Algorithm works with approximate separability</li>
+                    <li>Use greedy furthest-point algorithm for efficiency</li>
+                    <li>Apply dimension reduction before anchor finding</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Comparison Tab -->
+        <div id="comparison" class="tab-content">
+            <div class="grid">
+                <div class="success-card">
+                    <h3 style="color: #166534;">✅ Separable Case</h3>
+                    <div style="margin-top: 12px;">
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Computational Complexity</div>
+                            <div style="font-size: 0.9em; color: #166534;">Polynomial time O(m³n)</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Uniqueness</div>
+                            <div style="font-size: 0.9em; color: #166534;">Unique solution (up to scaling)</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Robustness</div>
+                            <div style="font-size: 0.9em; color: #166534;">Works with approximate separability</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Applications</div>
+                            <div style="font-size: 0.9em; color: #166534;">Topic modeling with anchor words</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="error-card">
+                    <h3 style="color: #991b1b;">❌ General NMF</h3>
+                    <div style="margin-top: 12px;">
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Computational Complexity</div>
+                            <div style="font-size: 0.9em; color: #991b1b;">NP-hard</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Uniqueness</div>
+                            <div style="font-size: 0.9em; color: #991b1b;">Multiple local optima</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Robustness</div>
+                            <div style="font-size: 0.9em; color: #991b1b;">Sensitive to initialization</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-radius: 4px; margin: 8px 0;">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Applications</div>
+                            <div style="font-size: 0.9em; color: #991b1b;">Heuristic alternating minimization</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="highlight-card card">
+                <h3>Real-World Performance</h3>
+                <div class="grid">
+                    <div>
+                        <h4 style="margin-bottom: 8px;">Experimental Results (Section 2.4)</h4>
+                        <ul style="font-size: 0.9em; margin-left: 16px;">
+                            <li>UCI Dataset: 300K NY Times articles</li>
+                            <li>0.9 fraction of topics had near-anchor words</li>
+                            <li>Anchor algorithm: hundreds of times faster than MALLET</li>
+                            <li>Comparable or better topic quality</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 style="margin-bottom: 8px;">When to Use Each Approach</h4>
+                        <ul style="font-size: 0.9em; margin-left: 16px;">
+                            <li><strong>Separable NMF:</strong> When topics have exclusive vocabulary</li>
+                            <li><strong>General NMF:</strong> When all words are shared across topics</li>
+                            <li><strong>Hybrid:</strong> Use anchor words as initialization for general NMF</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentExample = 'separable';
+        let currentAlgorithmStep = 0;
+        let geometricChart = null;
+
+        // Example matrices
+        const examples = {
+            separable: {
+                name: "Separable Matrix",
+                A: [
+                    [0.8, 0.1, 0.0],  // Topic 1: anchor word 1 (politics)
+                    [0.0, 0.7, 0.2],  // Topic 2: anchor word 2 (sports)  
+                    [0.1, 0.0, 0.9],  // Topic 3: anchor word 3 (tech)
+                    [0.1, 0.2, 0.1]   // Regular word (general)
+                ],
+                anchorWords: [0, 1, 2],
+                wordLabels: ["politics", "sports", "tech", "general"]
+            },
+            nonseparable: {
+                name: "Non-Separable Matrix", 
+                A: [
+                    [0.6, 0.3, 0.2],  // No clear anchor words
+                    [0.4, 0.5, 0.3],
+                    [0.2, 0.4, 0.6],
+                    [0.3, 0.3, 0.4]
+                ],
+                anchorWords: [],
+                wordLabels: ["word1", "word2", "word3", "word4"]
+            }
+        };
+
+        // Initialize displays
+        function initializeDisplays() {
+            updateTopicMatrixTable();
+            updateSeparabilityCheck();
+            updateGeometricVisualization();
+        }
+
+        // Select example
+        function selectExample(exampleType) {
+            currentExample = exampleType;
+            
+            // Update button states
+            document.getElementById('separableBtn').classList.remove('active');
+            document.getElementById('nonseparableBtn').classList.remove('active');
+            document.getElementById(exampleType + 'Btn').classList.add('active');
+            
+            // Update displays
+            updateTopicMatrixTable();
+            updateSeparabilityCheck();
+            updateGeometricVisualization();
+        }
+
+        // Update topic matrix table
+        function updateTopicMatrixTable() {
+            const example = examples[currentExample];
+            document.getElementById('matrixTypeName').textContent = example.name;
+            
+            const table = document.getElementById('topicMatrixTable');
+            table.innerHTML = '';
+            
+            // Header
+            const thead = table.createTHead();
+            const headerRow = thead.insertRow();
+            headerRow.insertCell().textContent = 'Word';
+            headerRow.insertCell().textContent = 'Topic 1';
+            headerRow.insertCell().textContent = 'Topic 2';
+            headerRow.insertCell().textContent = 'Topic 3';
+            
+            // Body
+            const tbody = table.createTBody();
+            example.A.forEach((row, i) => {
+                const tr = tbody.insertRow();
+                const wordCell = tr.insertCell();
+                wordCell.textContent = example.wordLabels[i];
+                wordCell.style.fontWeight = '600';
+                
+                if (example.anchorWords.includes(i)) {
+                    wordCell.innerHTML += ' <span class="anchor-word">🎯</span>';
+                }
+                
+                row.forEach((val, j) => {
+                    const cell = tr.insertCell();
+                    cell.textContent = val.toFixed(1);
+                    
+                    if (example.anchorWords.includes(i) && i === j) {
+                        cell.className = 'anchor-cell';
+                    } else if (val > 0.3) {
+                        cell.className = 'high-weight';
+                    } else if (val < 0.1) {
+                        cell.className = 'low-weight';
+                    }
+                });
+            });
+        }
+
+        // Update separability check
+        function updateSeparabilityCheck() {
+            const example = examples[currentExample];
+            const display = document.getElementById('separabilityCheck');
+            
+            if (example.anchorWords.length > 0) {
+                let html = `
+                    <div style="background: #f0fdf4; padding: 16px; border: 2px solid #22c55e; border-radius: 8px;">
+                        <div style="font-weight: 600; color: #166534; margin-bottom: 8px;">✅ Matrix is Separable!</div>
+                        <div style="font-size: 0.9em; color: #166534;">
+                `;
+                
+                example.anchorWords.forEach((wordIdx, topicIdx) => {
+                    html += `<div>Topic ${topicIdx + 1}: Anchor word "${example.wordLabels[wordIdx]}"</div>`;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+                display.innerHTML = html;
+            } else {
+                display.innerHTML = `
+                    <div style="background: #fef2f2; padding: 16px; border: 2px solid #ef4444; border-radius: 8px;">
+                        <div style="font-weight: 600; color: #991b1b; margin-bottom: 8px;">❌ Matrix is NOT Separable</div>
+                        <div style="font-size: 0.9em; color: #991b1b;">
+                            No topic has a clear anchor word (exclusive vocabulary)
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Update geometric visualization
+        function updateGeometricVisualization() {
+            const ctx = document.getElementById('geometricChart').getContext('2d');
+            
+            if (geometricChart) {
+                geometricChart.destroy();
+            }
+
+            const example = examples[currentExample];
+            
+            // Project word vectors to 2D (use first 2 topic weights)
+            const points = example.A.map((row, i) => ({
+                x: row[0] * 100,
+                y: row[1] * 100,
+                label: example.wordLabels[i],
+                isAnchor: example.anchorWords.includes(i)
+            }));
+
+            const anchorPoints = points.filter(p => p.isAnchor);
+            const regularPoints = points.filter(p => !p.isAnchor);
+
+            geometricChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Anchor Words',
+                            data: anchorPoints,
+                            backgroundColor: '#ef4444',
+                            borderColor: '#dc2626',
+                            pointRadius: 8,
+                            pointHoverRadius: 10
+                        },
+                        {
+                            label: 'Regular Words',
+                            data: regularPoints,
+                            backgroundColor: '#3b82f6',
+                            borderColor: '#2563eb',
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Topic 1 Weight'
+                            },
+                            beginAtZero: true
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Topic 2 Weight'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.parsed;
+                                    const dataPoint = context.raw;
+                                    return `${dataPoint.label}: (${(point.x/100).toFixed(2)}, ${(point.y/100).toFixed(2)})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Algorithm step control
+        function nextAlgorithmStep() {
+            if (currentAlgorithmStep < 4) {
+                // Deactivate current step
+                document.querySelectorAll('.algorithm-step')[currentAlgorithmStep].classList.remove('active');
+                
+                // Activate next step
+                currentAlgorithmStep++;
+                document.querySelectorAll('.algorithm-step')[currentAlgorithmStep].classList.add('active');
+                
+                if (currentAlgorithmStep >= 4) {
+                    document.getElementById('nextStepBtn').disabled = true;
+                    document.getElementById('nextStepBtn').style.background = '#9ca3af';
+                }
+            }
+        }
+
+        function resetAlgorithm() {
+            // Deactivate all steps
+            document.querySelectorAll('.algorithm-step').forEach(step => {
+                step.classList.remove('active');
+            });
+            
+            // Activate first step
+            currentAlgorithmStep = 0;
+            document.querySelectorAll('.algorithm-step')[currentAlgorithmStep].classList.add('active');
+            
+            // Reset button
+            document.getElementById('nextStepBtn').disabled = false;
+            document.getElementById('nextStepBtn').style.background = '#3b82f6';
+        }
+
+        // Tab switching function
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            initializeDisplays();
+        }
+    </script>
+</body>
+</html>

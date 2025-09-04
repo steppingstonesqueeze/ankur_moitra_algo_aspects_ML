@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVD Fundamentals & NMF Motivation (Section 2.1)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f3f4f6;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .tab:hover:not(.active) {
+            background: #e5e7eb;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .highlight-card {
+            background: #f0f9ff;
+            border: 2px solid #3b82f6;
+        }
+        .success-card {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+        }
+        .warning-card {
+            background: #fefce8;
+            border: 2px solid #eab308;
+        }
+        .error-card {
+            background: #fef2f2;
+            border: 2px solid #ef4444;
+        }
+        .formula {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            margin: 12px 0;
+            font-size: 1.1em;
+        }
+        .matrix-display {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+        }
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+        .slider-container {
+            margin: 20px 0;
+        }
+        .slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 12px;
+            text-align: center;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .negative-value {
+            background: #fecaca;
+            color: #dc2626;
+            font-weight: bold;
+        }
+        .positive-value {
+            background: #dcfce7;
+            color: #16a34a;
+            font-weight: bold;
+        }
+        .property-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .property-list li {
+            background: #f8fafc;
+            margin: 8px 0;
+            padding: 12px;
+            border-left: 4px solid #3b82f6;
+            border-radius: 4px;
+        }
+        .document-card {
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="color: #1f2937; margin-bottom: 8px;">Chapter 2.1: SVD Foundations & NMF Motivation</h1>
+        <p style="color: #6b7280; margin-bottom: 24px;">Interactive demonstration of SVD concepts and why we need NMF for text analysis</p>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('basics')">SVD Basics</button>
+            <button class="tab" onclick="showTab('approximation')">Rank-k Approximation</button>
+            <button class="tab" onclick="showTab('lsi')">Latent Semantic Indexing</button>
+            <button class="tab" onclick="showTab('problems')">SVD Problems & NMF Solution</button>
+        </div>
+
+        <!-- SVD Basics Tab -->
+        <div id="basics" class="tab-content active">
+            <div class="highlight-card card" style="margin-bottom: 24px;">
+                <h2>Singular Value Decomposition: M = UΣV<sup>T</sup></h2>
+                <div class="formula">
+                    M = UΣV<sup>T</sup> = Σᵢ σᵢ uᵢ vᵢ<sup>T</sup>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Key Properties</h3>
+                    <ul class="property-list">
+                        <li><strong>Existence:</strong> Every matrix has an SVD</li>
+                        <li><strong>Algorithms:</strong> Computable in O(mn²) time</li>
+                        <li><strong>Uniqueness:</strong> Unique if singular values are distinct</li>
+                        <li><strong>Best Approximation:</strong> Optimal rank-k approximation</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h3>Sample Matrix (4×4)</h3>
+                    <div class="matrix-display" id="sampleMatrix">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <div style="margin-top: 12px; text-align: center; color: #6b7280;">
+                        Frobenius Norm: <span id="frobeniusNorm"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Frobenius Norm (Definition 2.1.1)</h3>
+                <div class="formula">
+                    ||M||<sub>F</sub> = √(Σᵢⱼ M²ᵢⱼ) = √(Σᵢ σᵢ²)
+                </div>
+                <p style="text-align: center; color: #6b7280; margin-top: 12px;">
+                    Rotationally invariant norm - key for SVD optimality
+                </p>
+            </div>
+        </div>
+
+        <!-- Rank-k Approximation Tab -->
+        <div id="approximation" class="tab-content">
+            <div class="success-card card" style="margin-bottom: 24px;">
+                <h2>Eckart-Young Theorem (2.1.2 & 2.1.4)</h2>
+                <div class="formula">
+                    Best rank-k approximation: M<sub>k</sub> = Σᵢ₌₁ᵏ σᵢuᵢvᵢ<sup>T</sup>
+                </div>
+            </div>
+
+            <div class="slider-container card">
+                <h3>Approximation Rank: <span id="rankValue">2</span></h3>
+                <input type="range" class="slider" id="rankSlider" min="1" max="4" value="2" onchange="updateApproximation()">
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Approximation Quality vs Rank</h3>
+                    <div class="chart-container">
+                        <canvas id="approximationChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Error Analysis</h3>
+                    <div id="errorAnalysis">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                    <div style="margin-top: 12px; font-size: 0.8em; color: #6b7280;">
+                        ||M - M<sub>k</sub>||<sub>F</sub> = √(Σᵢ₌ₖ₊₁ʳ σᵢ²)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LSI Tab -->
+        <div id="lsi" class="tab-content">
+            <div class="warning-card card" style="margin-bottom: 24px;">
+                <h2>Latent Semantic Indexing (LSI)</h2>
+                <p style="margin-bottom: 12px;">
+                    Document similarity using SVD on term-by-document matrix
+                </p>
+                <div class="formula">
+                    similarity(doc<sub>i</sub>, doc<sub>j</sub>) = ⟨U<sup>T</sup><sub>1...k</sub>M<sub>i</sub>, U<sup>T</sup><sub>1...k</sub>M<sub>j</sub>⟩
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Document Topic Compositions</h3>
+                    <div id="documentCompositions">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>Topic Distribution</h3>
+                    <div class="chart-container">
+                        <canvas id="topicDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Problems & NMF Tab -->
+        <div id="problems" class="tab-content">
+            <div class="error-card card" style="margin-bottom: 24px;">
+                <h2 style="color: #dc2626;">Problems with SVD for Text Analysis</h2>
+                
+                <div class="grid">
+                    <div class="card">
+                        <h3 style="color: #dc2626;">Issue 1: Orthogonal Topics</h3>
+                        <p style="font-size: 0.9em; margin-bottom: 12px;">SVD forces topics to be orthogonal, but real topics overlap!</p>
+                        <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.8em;">
+                            Topic "Politics": [election, vote, candidate, economy, ...]<br>
+                            Topic "Finance": [stock, economy, market, trade, ...]<br>
+                            <span style="color: #dc2626;">⟨politics, finance⟩ = 0 (forced by SVD)</span>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 style="color: #dc2626;">Issue 2: Negative Values</h3>
+                        <p style="font-size: 0.9em; margin-bottom: 12px;">Topics can have negative word weights - no interpretation!</p>
+                        <div id="negativeValuesExample">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="success-card card" style="margin-bottom: 24px;">
+                <h2 style="color: #16a34a;">NMF Solution (Definition 2.1.7)</h2>
+                <div class="formula">
+                    M = AW where A ≥ 0, W ≥ 0
+                </div>
+                <div class="grid" style="margin-top: 16px;">
+                    <div style="font-size: 0.9em;">
+                        <strong>A:</strong> Topic-word matrix (non-negative)<br>
+                        <strong>W:</strong> Document-topic matrix (non-negative)
+                    </div>
+                    <div style="font-size: 0.9em;">
+                        <strong>Interpretation:</strong> Documents are convex combinations of topics<br>
+                        <strong>Problem:</strong> NP-hard in general!
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>SVD vs NMF Comparison</h3>
+                <table id="comparisonTable">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>SVD</th>
+                            <th>NMF</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Orthogonal Topics</td>
+                            <td class="negative-value">Yes</td>
+                            <td class="positive-value">No</td>
+                        </tr>
+                        <tr>
+                            <td>Non-negative Values</td>
+                            <td class="negative-value">No</td>
+                            <td class="positive-value">Yes</td>
+                        </tr>
+                        <tr>
+                            <td>Computational Complexity</td>
+                            <td class="positive-value">O(mn²)</td>
+                            <td class="negative-value">NP-hard</td>
+                        </tr>
+                        <tr>
+                            <td>Interpretability</td>
+                            <td class="negative-value">Low</td>
+                            <td class="positive-value">High</td>
+                        </tr>
+                        <tr>
+                            <td>Uniqueness</td>
+                            <td class="positive-value">Unique</td>
+                            <td class="negative-value">Non-unique</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="highlight-card card">
+                <h3>Chapter 2 Roadmap</h3>
+                <p style="margin: 12px 0;">
+                    <strong>Problem:</strong> NMF is NP-hard in general<br>
+                    <strong>Solution:</strong> Find special cases with polynomial algorithms<br>
+                    <strong>Key Insight:</strong> "Separability" assumption → Anchor Words Algorithm
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let approximationChart = null;
+        let topicChart = null;
+
+        // Sample matrix and SVD data
+        const sampleMatrix = [
+            [4, 2, 1, 0],
+            [2, 3, 1, 1],
+            [1, 1, 2, 1],
+            [0, 1, 1, 1]
+        ];
+
+        const singularValues = [6.2, 3.1, 1.8, 0.5];
+
+        // Document data for LSI demo
+        const documents = [
+            { name: 'Sports Article', politics: 0.1, sports: 0.8, tech: 0.1 },
+            { name: 'Election News', politics: 0.9, sports: 0.05, tech: 0.05 },
+            { name: 'AI Research', politics: 0.1, sports: 0.1, tech: 0.8 },
+            { name: 'Olympic Games', politics: 0.2, sports: 0.7, tech: 0.1 },
+            { name: 'Tech Policy', politics: 0.4, sports: 0.1, tech: 0.5 }
+        ];
+
+        // Initialize displays
+        function initializeDisplays() {
+            // Sample matrix display
+            updateSampleMatrix();
+            
+            // Document compositions
+            updateDocumentCompositions();
+            
+            // Negative values example
+            updateNegativeValuesExample();
+            
+            // Initialize charts
+            updateApproximationChart();
+            updateTopicDistributionChart();
+        }
+
+        // Update sample matrix display
+        function updateSampleMatrix() {
+            const display = document.getElementById('sampleMatrix');
+            let html = '';
+            sampleMatrix.forEach(row => {
+                html += `[${row.join(', ')}]<br>`;
+            });
+            display.innerHTML = html;
+
+            // Calculate Frobenius norm
+            const frobeniusNorm = Math.sqrt(
+                sampleMatrix.flat().reduce((sum, x) => sum + x * x, 0)
+            );
+            document.getElementById('frobeniusNorm').textContent = frobeniusNorm.toFixed(2);
+        }
+
+        // Update document compositions
+        function updateDocumentCompositions() {
+            const display = document.getElementById('documentCompositions');
+            display.innerHTML = '';
+            
+            documents.forEach((doc, i) => {
+                const docDiv = document.createElement('div');
+                docDiv.className = 'document-card';
+                docDiv.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 4px;">${doc.name}</div>
+                    <div style="font-size: 0.8em;">
+                        Politics: ${doc.politics.toFixed(1)} | 
+                        Sports: ${doc.sports.toFixed(1)} | 
+                        Tech: ${doc.tech.toFixed(1)}
+                    </div>
+                `;
+                display.appendChild(docDiv);
+            });
+        }
+
+        // Update negative values example
+        function updateNegativeValuesExample() {
+            const display = document.getElementById('negativeValuesExample');
+            display.innerHTML = `
+                <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.8em;">
+                    Topic vector: [0.5, <span style="color: #dc2626; font-weight: bold;">-0.3</span>, 0.8, <span style="color: #dc2626; font-weight: bold;">-0.1</span>, ...]<br>
+                    <span style="color: #dc2626;">What does "negative contribution" mean?</span>
+                </div>
+            `;
+        }
+
+        // Update approximation analysis
+        function updateApproximation() {
+            const rank = parseInt(document.getElementById('rankSlider').value);
+            document.getElementById('rankValue').textContent = rank;
+
+            // Calculate error
+            const error = Math.sqrt(
+                singularValues.slice(rank).reduce((sum, s) => sum + s * s, 0)
+            );
+            const retainedValues = singularValues.slice(0, rank).join(', ');
+
+            const display = document.getElementById('errorAnalysis');
+            display.innerHTML = `
+                <div style="background: #f8fafc; padding: 12px; border-radius: 6px;">
+                    <div><strong>Current rank:</strong> <span style="font-family: monospace;">${rank}</span></div>
+                    <div style="margin-top: 8px;"><strong>Frobenius error:</strong> 
+                        <span style="font-family: monospace; color: #dc2626;">${error.toFixed(3)}</span>
+                    </div>
+                    <div style="margin-top: 8px;"><strong>Retained σᵢ:</strong> 
+                        <span style="font-family: monospace;">${retainedValues}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Update approximation chart
+        function updateApproximationChart() {
+            const ctx = document.getElementById('approximationChart').getContext('2d');
+            
+            if (approximationChart) {
+                approximationChart.destroy();
+            }
+
+            // Calculate errors for each rank
+            const errorData = [];
+            for (let k = 1; k <= 4; k++) {
+                const error = Math.sqrt(
+                    singularValues.slice(k).reduce((sum, s) => sum + s * s, 0)
+                );
+                errorData.push({ x: k, y: error });
+            }
+
+            approximationChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Frobenius Error',
+                        data: errorData,
+                        borderColor: '#3b82f6',
+                        backgroundColor: '#3b82f6',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Rank k'
+                            },
+                            min: 1,
+                            max: 4,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Approximation Error'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update topic distribution chart
+        function updateTopicDistributionChart() {
+            const ctx = document.getElementById('topicDistributionChart').getContext('2d');
+            
+            if (topicChart) {
+                topicChart.destroy();
+            }
+
+            topicChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: documents.map(d => d.name),
+                    datasets: [
+                        {
+                            label: 'Politics',
+                            data: documents.map(d => (d.politics * 100).toFixed(1)),
+                            backgroundColor: '#ef4444',
+                            stack: 'stack1'
+                        },
+                        {
+                            label: 'Sports',
+                            data: documents.map(d => (d.sports * 100).toFixed(1)),
+                            backgroundColor: '#22c55e',
+                            stack: 'stack1'
+                        },
+                        {
+                            label: 'Tech',
+                            data: documents.map(d => (d.tech * 100).toFixed(1)),
+                            backgroundColor: '#3b82f6',
+                            stack: 'stack1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxRotation: 45
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Percentage'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Tab switching function
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            initializeDisplays();
+            updateApproximation(); // Initialize approximation display
+        }
+    </script>
+</body>
+</html>
